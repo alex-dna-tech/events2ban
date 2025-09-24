@@ -1,4 +1,4 @@
-# Wail2Ban-NG (Maintained Fork)
+# events2ban
 [![Stand With Ukraine](https://raw.githubusercontent.com/vshymanskyy/StandWithUkraine/main/banner-direct-single.svg)](https://stand-with-ukraine.pp.ua)
 
 [![License: BSD-3-Clause](https://img.shields.io/badge/License-BSD%203--Clause-blue.svg)](./LICENSE)
@@ -6,18 +6,14 @@
 > A maintained and extended fork of the original [wail2ban](https://github.com/glasnt/wail2ban) project by Katie McLaughlin.  
 > This project continues development, adds modern support, and ensures ongoing compatibility.
 
-![Saddest Whale](http://i.imgur.com/NVlsY.png "Saddest Whale")
-
-wail2ban is a Windows port of the basic functionality of [fail2ban](http://www.fail2ban.org/), inspired by elements of [ts_block](https://github.com/EvanAnderson/ts_block).
-
 ## Overview
 
-wail2ban monitors Windows Event Logs for failed login attempts from specified event IDs. When multiple failed attempts originate from the same IP within a configurable time window, it automatically creates temporary Windows Firewall rules to block further access from those IPs.
+events2ban monitors Windows Event Logs for failed login attempts from specified event IDs. When multiple failed attempts originate from the same IP within a configurable time window, it automatically creates temporary Windows Firewall rules to block further access from those IPs.
 
 ## Installation
-To install wail2ban:
+To install events2ban:
 
-1. Download or copy the `wail2ban.ps1` script to any folder.
+1. Download or copy the `events2ban.ps1` script to any folder.
 2. Run it with the `-install` parameter.
 
 ## Prerequisites
@@ -44,36 +40,36 @@ You can then use `C:\secure\abuseipdb.xml` with the `-AbuseIPDBKeyPath` paramete
 
 ## Usage
 
-### wail2ban.ps1
+### events2ban.ps1
 
 - To list current banned IPs:
   ```powershell
-  .\wail2ban.ps1 -ListBans
+  .\events2ban.ps1 -ListBans
   ```
 
 - To unban a specific IP:
   ```powershell
-  .\wail2ban.ps1 -UnbanIP "X.X.X.X"
+  .\events2ban.ps1 -UnbanIP "X.X.X.X"
   ```
 
 - To unban all IPs:
   ```powershell
-  .\wail2ban.ps1 -ClearAllBans
+  .\events2ban.ps1 -ClearAllBans
   ```
 
 - To run the script silently (no console messages):
   ```powershell
-  .\wail2ban.ps1 -Silent
+  .\events2ban.ps1 -Silent
   ```
 
 - To install the scheduled task to run at startup:
   ```powershell
-  .\wail2ban.ps1 -install
+  .\events2ban.ps1 -install
   ```
 
 - To uninstall the scheduled task:
   ```powershell
-  .\wail2ban.ps1 -uninstall
+  .\events2ban.ps1 -uninstall
   ```
 
 ### report.ps1
@@ -85,12 +81,12 @@ You can then use `C:\secure\abuseipdb.xml` with the `-AbuseIPDBKeyPath` paramete
 
 - To create an encrypted credential file for sending emails:
   ```powershell
-  .\report.ps1 -GenMailCred "C:\secure\wail2ban_creds.xml"
+  .\report.ps1 -GenMailCred "C:\secure\events2ban_creds.xml"
   ```
 
 - To generate and email a report using a credential file:
   ```powershell
-  .\report.ps1 -Mail -SmtpServer "smtp.example.com" -To "recipient@example.com" -MailCred "C:\secure\wail2ban_creds.xml"
+  .\report.ps1 -Mail -SmtpServer "smtp.example.com" -To "recipient@example.com" -MailCred "C:\secure\events2ban_creds.xml"
   ```
 
 - To create an encrypted AbuseIPDB API key file:
@@ -105,7 +101,7 @@ You can then use `C:\secure\abuseipdb.xml` with the `-AbuseIPDBKeyPath` paramete
 
 ### Parameters Overview
 
-#### `wail2ban.ps1` Parameters
+#### `events2ban.ps1` Parameters
 - `-ListBans`: Lists all the currently banned IP addresses.
 - `-UnbanIP <IP>`: Removes the specified IP address from the ban list.
 - `-ClearAllBans`: Removes all the IP addresses that have been banned by this script.
@@ -165,8 +161,8 @@ You can extend or customize the script by tweaking:
 - The firewall rule naming conventions in `$FirewallRulePrefix`.
 
 > [!NOTE] 
-> The script logs significant actions and errors, which can be retrieved by examining Windows Event Logs under the "Application" log with source "wail2ban".
+> The script logs significant actions and errors, which can be retrieved by examining Windows Event Logs under the "Application" log with source "events2ban".
 
 ---
 
-For further customization or integration, review and modify the `wail2ban.ps1` script as needed.
+For further customization or integration, review and modify the `events2ban.ps1` script as needed.

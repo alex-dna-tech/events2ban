@@ -1,8 +1,8 @@
 <#
 .SYNOPSIS
-    Generates an HTML report of wail2ban activity and can report IPs to AbuseIPDB service or Email.
+    Generates an HTML report of events2ban activity and can report IPs to AbuseIPDB service or Email.
 .DESCRIPTION
-    This script reads the wail2ban event logs, creates an HTML report summarizing banned IPs, and can report those IPs to AbuseIPDB.
+    This script reads the events2ban event logs, creates an HTML report summarizing banned IPs, and can report those IPs to AbuseIPDB.
 .PARAMETER ReportDays
     Specifies the number of days to include in the HTML report (default is 7).
 .PARAMETER Mail
@@ -89,10 +89,10 @@ function _InstallMailReportTask {
         exit 1
     }
 
-    $taskName = "wail2ban-report"
+    $taskName = "events2ban-report"
 
     # Prompt for required parameters
-    Write-Host "Configuring scheduled task for wail2ban report."
+    Write-Host "Configuring scheduled task for events2ban report."
     $CredPath = Read-Host "Enter path to credential file (e.g., .\email.xml or emty)"
 
     if ([string]::IsNullOrWhiteSpace($CredPath)) {
@@ -139,10 +139,10 @@ function _InstallAbuseIPDBTask {
         exit 1
     }
 
-    $taskName = "wail2ban-abuseipdb-report"
+    $taskName = "events2ban-abuseipdb-report"
 
     # Prompt for required parameters
-    Write-Host "Configuring scheduled task for wail2ban AbuseIPDB reporting."
+    Write-Host "Configuring scheduled task for events2ban AbuseIPDB reporting."
     $KeyPath = Read-Host "Enter path to AbuseIPDB API key file (e.g., .\abuseipdb.xml or empty)"
 
     if ([string]::IsNullOrWhiteSpace($KeyPath)) {
@@ -248,7 +248,7 @@ if ($AbuseIPDBReport) {
     # Get events from last 24 hours
     $events = Get-WinEvent -FilterHashtable @{
         LogName      = 'Application'
-        ProviderName = 'wail2ban'
+        ProviderName = 'events2ban'
         ID           = 1000
         StartTime = (Get-Date).Date
         EndTime   = (Get-Date).Date.AddDays(1) 
@@ -264,7 +264,7 @@ if ($AbuseIPDBReport) {
                     IP         = $logObject.ip
                     Categories = $AbuseIPDBCategories -join ','
                     ReportDate = $event.TimeCreated.ToUniversalTime().ToString("o")
-                    Comment    = "wail2ban by alex-dna-tech on Github: $event.Message"
+                    Comment    = "events2ban report: $(event.Message)"
                 }
             }
         } catch {
@@ -289,7 +289,7 @@ if ($AbuseIPDBReport) {
 
         $bodyLines = @(
             "--$boundary",
-            "Content-Disposition: form-data; name=`"csv`"; filename=`"wail2ban-abuseipdb-report.csv`"",
+            "Content-Disposition: form-data; name=`"csv`"; filename=`"events2ban-abuseipdb-report.csv`"",
             "Content-Type: text/csv",
             "",
             "IP,Categories,ReportDate,Comment",
@@ -332,11 +332,11 @@ if ($Mail) {
     }
 }
 
-function Get-Wail2BanHTMLReport {
+function Get-events2banHTMLReport {
     $startTime = (Get-Date).AddDays(-$ReportDays)
     $events = Get-WinEvent -FilterHashtable @{
         LogName      = 'Application'
-        ProviderName = 'wail2ban'
+        ProviderName = 'events2ban'
         ID           = 1000
         StartTime    = $startTime
     } -ErrorAction SilentlyContinue
@@ -372,7 +372,7 @@ function Get-Wail2BanHTMLReport {
 <!DOCTYPE html>
 <html>
 <head>
-    <title>WAIL2Ban Report</title>
+    <title>events2ban Report</title>
     <style>
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -381,7 +381,7 @@ function Get-Wail2BanHTMLReport {
     </style>
 </head>
 <body>
-    <h1>WAIL2Ban Report $dateRange (Last $ReportDays Days)</h1>
+    <h1>events2ban Report $dateRange (Last $ReportDays Days)</h1>
     
     <h2>IP Statistics</h2>
     <table>
@@ -424,7 +424,7 @@ if ($Mail) {
         exit 1
     }
 
-    $reportData = Get-Wail2BanHTMLReport
+    $reportData = Get-events2banHTMLReport
 	
 	# Create SMTP client
 	$smtp = New-Object System.Net.Mail.SmtpClient($SMTPServer, $SMTPPort)
@@ -436,7 +436,7 @@ if ($Mail) {
 	$msg = New-Object System.Net.Mail.MailMessage
 	$msg.From = $credential.UserName
 	$msg.To.Add($To)
-	$msg.Subject = "WAIL2Ban Report $($reportData.DateRange)"
+	$msg.Subject = "events2ban Report $($reportData.DateRange)"
 	$msg.Body = $reportData.Html
 	$msg.IsBodyHtml = $true
 
@@ -452,7 +452,7 @@ if ($Mail) {
     exit 0
 }
 
-$reportData = Get-Wail2BanHTMLReport
+$reportData = Get-events2banHTMLReport
 $reportPath = Join-Path $PSScriptRoot "report.html"
 $reportData.Html | Out-File $reportPath -Force
 Write-Host "Report generated at $reportPath"

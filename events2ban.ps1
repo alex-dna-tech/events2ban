@@ -1,9 +1,9 @@
 <#
 .SYNOPSIS
-    wail2ban is a PowerShell script that monitors Windows Event Logs for failed login attempts and bans the offending IP addresses.
+    events2ban is a PowerShell script that monitors Windows Event Logs for failed login attempts and bans the offending IP addresses.
 
 .DESCRIPTION
-    wail2ban is an attempt to recreate the functionality of fail2ban for Windows. It monitors the Windows Event Logs for specific event IDs that indicate a failed login attempt. When a certain number of failed attempts from the same IP address are detected within a specified time window, the script will create a new inbound firewall rule to block that IP address.
+    events2ban is an attempt to recreate the functionality of fail2ban for Windows. It monitors the Windows Event Logs for specific event IDs that indicate a failed login attempt. When a certain number of failed attempts from the same IP address are detected within a specified time window, the script will create a new inbound firewall rule to block that IP address.
 
     The script can be configured to monitor different event logs and event IDs, and the ban duration is configurable. The script also supports a whitelist of IP addresses that should never be banned.
 
@@ -53,6 +53,7 @@ param (
     [switch]$Uninstall,
     [int]$CheckWindow = 120,
     [int]$CheckCount = 5,
+    # TODO: Check `LoopDuration` to be smaller `CheckWindow` and set half of `CheckWindow` if not set by default
     [int]$LoopDuration = 5,
     [int]$MaxBanDuration = 7776000,
     [string]$EventsToTrack = "Security 4625",
@@ -79,12 +80,13 @@ if ($policy -eq 'Restricted') {
 }
 
 ################################################################################
-#                        _ _ ____  _                 
-#         __      ____ _(_) |___ \| |__   __ _ _ __  
-#         \ \ /\ / / _` | | | __) | '_ \ / _` | '_ \ 
-#          \ V  V / (_| | | |/ __/| |_) | (_| | | | |
-#           \_/\_/ \__,_|_|_|_____|_.__/ \__,_|_| |_|
-#   
+#                              __         ___________.                  
+#     _______  __ ____   _____/  |_  _____\_____  \_ |__ _____    ____  
+#   _/ __ \  \/ // __ \ /    \   __\/  ___//  ____/| __ \\__  \  /    \ 
+#   \  ___/\   /\  ___/|   |  \  |  \___ \/       \| \_\ \/ __ \|   |  \
+#    \___  >\_/  \___  >___|  /__| /____  >_______ \___  (____  /___|  /
+#        \/          \/     \/          \/        \/   \/     \/     \/ 
+#
 ################################################################################
 
 
@@ -97,7 +99,7 @@ $DebugPreference = if ($Silent) { "SilentlyContinue" } else { "Continue" }
 
 $BannedIPsStateFile = $PSScriptRoot + "\bannedIPs.json"
 $RecordEventLog = "Application"     # Where we store our own event messages
-$FirewallRulePrefix = "wail2ban block:" # What we name our Rules
+$FirewallRulePrefix = "events2ban block:" # What we name our Rules
 
 ################################################################################
 #  End of Configurable Variables
@@ -140,7 +142,7 @@ $SelfList += (Get-NetIPAddress -AddressFamily IPv4).IPAddress
 
 function _LogEventMessage ($text, $task) {
     $e = New-Object System.Diagnostics.EventLog($RecordEventLog)
-    $e.Source = "wail2ban"
+    $e.Source = "events2ban"
     switch ($task) {
         "BAN" { $logeventID = 1000 }
         "UNBAN" { $logeventID = 2000 }
@@ -164,7 +166,7 @@ function _WriteLog ($type, $action, $ip, $reason) {
     }
 }
 	 
-# Get the current list of wail2ban bans
+# Get the current list of events2ban bans
 function _GetJailList {
     return Get-NetFirewallRule -DisplayName "$($FirewallRulePrefix)*" | Select-Object @{Name = 'name'; Expression = { $_.DisplayName } }, @{Name = 'description'; Expression = { $_.Description } }
 }
@@ -221,16 +223,16 @@ function _LoadBannedIPsState {
                          $BannedIPs[$prop.Name] = $prop.Value
                      }
                 }
-                _Debug "STATE" "wail2ban" "$($BannedIPs.Count) ban counts loaded from $BannedIPsStateFile"
+                _Debug "STATE" "events2ban" "$($BannedIPs.Count) ban counts loaded from $BannedIPsStateFile"
             }
         }
         catch {
             $errorMessage = $_.Exception.Message
-            _Error "STATE LOAD FAILED" "wail2ban" "Could not load or parse $BannedIPsStateFile. Error: `"$errorMessage`""
+            _Error "STATE LOAD FAILED" "events2ban" "Could not load or parse $BannedIPsStateFile. Error: `"$errorMessage`""
         }
     }
     else { 
-        _Debug "STATE" "wail2ban" "No state file found at $BannedIPsStateFile"
+        _Debug "STATE" "events2ban" "No state file found at $BannedIPsStateFile"
     }
 }
 
@@ -241,7 +243,7 @@ function _SaveBannedIPsState {
     }
     catch {
         $errorMessage = $_.Exception.Message
-        _Error "STATE SAVE FAILED" "wail2ban" "Could not save state to $BannedIPsStateFile. Error: `"$errorMessage`""
+        _Error "STATE SAVE FAILED" "events2ban" "Could not save state to $BannedIPsStateFile. Error: `"$errorMessage`""
     }
 }
 
@@ -397,10 +399,10 @@ function _TrackIP($IP, $event) {
 
 # Install shchedule task
 function _InstallScheduledTask {
-    $taskName = "wail2ban"
+    $taskName = "events2ban"
     # Unregister existing task if any
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $($PSScriptRoot)\wail2ban.ps1 -Silent"
+    $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $($PSScriptRoot)\events2ban.ps1 -Silent"
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet -Hidden
@@ -408,13 +410,13 @@ function _InstallScheduledTask {
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
     # Start the task immediately
     Start-ScheduledTask -TaskName $taskName | Out-Null
-    Write-Host "Scheduled task 'wail2ban' installed and started successfully."
+    Write-Host "Scheduled task 'events2ban' installed and started successfully."
 }
 
 function _UninstallScheduledTask {
-    $taskName = "wail2ban"
+    $taskName = "events2ban"
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    Write-Host "Scheduled task 'wail2ban' uninstalled successfully."
+    Write-Host "Scheduled task 'events2ban' uninstalled successfully."
 }
 
 # Handle script argupments
@@ -432,7 +434,7 @@ function _HandleCli {
     if ($ListBans) {
         $inmates = _GetJailList
         if ($inmates) {
-            "wail2ban currently banned listings: `n"
+            "events2ban currently banned listings: `n"
             foreach ($a in $inmates) {
                 $IP = $a.name.substring($FirewallRulePrefix.length + 1)
                 $Expire = $a.description.substring("Expire: ".length)
@@ -451,7 +453,7 @@ function _HandleCli {
     }
 
     if ($ClearAllBans) {
-        _Debug "JAILBREAK" "wail2ban" "Jailbreak initiated by console. Removing ALL IPs currently banned"
+        _Debug "JAILBREAK" "events2ban" "Jailbreak initiated by console. Removing ALL IPs currently banned"
         $EnrichmentCentre = _GetJailList
         if ($EnrichmentCentre) {
             foreach ($subject in $EnrichmentCentre) {
@@ -470,12 +472,12 @@ function Main {
     _LoadBannedIPsState
     _HandleCli
 
-    _Debug "START" "wail2ban" "wail2ban invoked"
+    _Debug "START" "events2ban" "events2ban invoked"
 
-    _Debug "CONFIG" "wail2ban" "Checking for a heap of events: "
-    $CheckEventPairs | ForEach-Object { _Debug "CONFIG" "wail2ban" " - $($_.LogName) log event code $($_.EventID)" }
-    _Debug "CONFIG" "wail2ban" "The Whitelist: $Whitelist"
-    _Debug "CONFIG" "wail2ban" "The Self-list: $Selflist"
+    _Debug "CONFIG" "events2ban" "Checking for a heap of events: "
+    $CheckEventPairs | ForEach-Object { _Debug "CONFIG" "events2ban" " - $($_.LogName) log event code $($_.EventID)" }
+    _Debug "CONFIG" "events2ban" "The Whitelist: $Whitelist"
+    _Debug "CONFIG" "events2ban" "The Self-list: $Selflist"
 
     while ($true) {
         $now = Get-Date
