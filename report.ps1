@@ -68,9 +68,13 @@ function _GenerateCredentialFile {
 
 function _GenerateAbuseIPDBKeyFile {
     param(
-        [Parameter(Mandatory=$true)]
         [string]$Path
     )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Path = ".\abuseipdb.xml"
+        Write-Host "No path provided, using default: $Path"
+    }
 
     $ApiKey = Read-Host "Enter AbuseIPDB API Key" -AsSecureString
     try {
@@ -196,19 +200,16 @@ function _HandleCli {
     }
 
     if ($PSBoundParameters.ContainsKey('GenMailCred')) {
-        if (-not $GenMailCred) {
-            Write-Error "The -GenMailCred parameter requires a path argument for the credential file."
-            exit 1
+        $credPath = $GenMailCred
+        if ([string]::IsNullOrWhiteSpace($credPath)) {
+            $credPath = ".\email.xml"
+            Write-Host "No path provided, using default: $credPath"
         }
-        _GenerateCredentialFile -Path $GenMailCred
+        _GenerateCredentialFile -Path $credPath
         exit 0
     }
 
     if ($PSBoundParameters.ContainsKey('GenAbuseIPDBKey')) {
-        if (-not $GenAbuseIPDBKey) {
-            Write-Error "The -GenAbuseIPDBKey parameter requires a path argument for the API key file."
-            exit 1
-        }
         _GenerateAbuseIPDBKeyFile -Path $GenAbuseIPDBKey
         exit 0
     }
@@ -264,7 +265,7 @@ if ($AbuseIPDBReport) {
                     IP         = $logObject.ip
                     Categories = $AbuseIPDBCategories -join ','
                     ReportDate = $event.TimeCreated.ToUniversalTime().ToString("o")
-                    Comment    = "events2ban report: $(event.Message)"
+                    Comment    = "events2ban report: $($event.Message)"
                 }
             }
         } catch {
@@ -367,12 +368,12 @@ function Get-events2banHTMLReport {
     $totalEvents = $jsonLog.Count
     $uniqueIPs = $ipStats.Count
 
-    $dateRange = "$($startTime.ToString('yy-MM-dd')) - $((Get-Date).ToString('yy-MM-dd'))"
+    $dateRange = "$($startTime.ToString('yy-MM-dd'))/$((Get-Date).ToString('yy-MM-dd'))"
     $html = @"
 <!DOCTYPE html>
 <html>
 <head>
-    <title>events2ban Report</title>
+    <title>Events2Ban Report</title>
     <style>
         table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
         th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
@@ -381,7 +382,7 @@ function Get-events2banHTMLReport {
     </style>
 </head>
 <body>
-    <h1>events2ban Report $dateRange (Last $ReportDays Days)</h1>
+    <h1>Events2Ban Report $dateRange (Last $ReportDays Days)</h1>
     
     <h2>IP Statistics</h2>
     <table>
