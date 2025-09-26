@@ -265,7 +265,7 @@ if ($AbuseIPDBReport) {
                     IP         = $logObject.ip
                     Categories = $AbuseIPDBCategories -join ','
                     ReportDate = $event.TimeCreated.ToUniversalTime().ToString("o")
-                    Comment    = "events2ban report: $($event.Message)"
+                    Comment    = "events2ban report from $($event.MachineName): $($event.Message)"
                 }
             }
         } catch {
