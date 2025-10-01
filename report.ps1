@@ -16,7 +16,7 @@
 .PARAMETER MailCred
     Path to the credential file for SMTP authentication. Required if -Mail is specified.
 .PARAMETER GenMailCred
-    If specified, prompts for SMTP credentials and saves them to the given path, then exits.
+    If specified, prompts for SMTP credentials and saves them to the path specified by -MailCred (or a default path), then exits.
 .PARAMETER InstallMailReportTask
     Installs the scheduled task for the HTML report.
 .PARAMETER AbuseIPDBReport
@@ -24,7 +24,7 @@
 .PARAMETER AbuseIPDBKeyPath
     Path to the AbuseIPDB API key file. Required if -AbuseIPDBReport is specified.
 .PARAMETER GenAbuseIPDBKey
-    If specified, prompts for an AbuseIPDB API key and saves it to the given path, then exits.
+    If specified, prompts for an AbuseIPDB API key and saves it to the path specified by -AbuseIPDBKeyPath (or a default path), then exits.
 .PARAMETER AbuseIPDBCategories
     Comma-separated list of AbuseIPDB categories to use for reporting. Required if -AbuseIPDBReport is specified.
 .PARAMETER InstallAbuseIPDBTask
@@ -38,20 +38,24 @@ param (
     [int]$SmtpPort = 587,
     [string[]]$To,
     [string]$MailCred,
-    [string]$GenMailCred,
+    [switch]$GenMailCred,
     [switch]$InstallMailReportTask,
     [switch]$AbuseIPDBReport,
     [string]$AbuseIPDBKeyPath,
-    [string]$GenAbuseIPDBKey,
+    [switch]$GenAbuseIPDBKey,
     [string[]]$AbuseIPDBCategories = "18",
     [switch]$InstallAbuseIPDBTask
 )
 
 function _GenerateCredentialFile {
     param(
-        [Parameter(Mandatory=$true)]
         [string]$Path
     )
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        $Path = ".\email.xml"
+        Write-Host "No path provided, using default: $Path"
+    }
 
     $EmailLogin = Read-Host "Enter SMTP Username"
     $SecurePassword =  Read-Host "Enter SMTP Password" -AsSecureString
@@ -199,8 +203,8 @@ function _HandleCli {
         exit
     }
 
-    if ($PSBoundParameters.ContainsKey('GenMailCred')) {
-        $credPath = $GenMailCred
+    if ($GenMailCred) {
+        $credPath = $MailCred
         if ([string]::IsNullOrWhiteSpace($credPath)) {
             $credPath = ".\email.xml"
             Write-Host "No path provided, using default: $credPath"
@@ -209,8 +213,8 @@ function _HandleCli {
         exit 0
     }
 
-    if ($PSBoundParameters.ContainsKey('GenAbuseIPDBKey')) {
-        _GenerateAbuseIPDBKeyFile -Path $GenAbuseIPDBKey
+    if ($GenAbuseIPDBKey) {
+        _GenerateAbuseIPDBKeyFile -Path $AbuseIPDBKeyPath
         exit 0
     }
 }
