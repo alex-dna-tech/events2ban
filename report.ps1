@@ -47,6 +47,8 @@ param (
     [switch]$InstallAbuseIPDBTask
 )
 
+Add-Type -AssemblyName System.Security
+
 function _GenerateCredentialFile {
     param(
         [string]$Path
