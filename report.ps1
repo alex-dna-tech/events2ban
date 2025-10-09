@@ -82,7 +82,17 @@ function _GenerateAbuseIPDBKeyFile {
 
     $ApiKey = Read-Host "Enter AbuseIPDB API Key" -AsSecureString
     try {
-        $ApiKey | Export-Clixml -Path $Path -Force
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ApiKey)
+        try {
+            $plainTextApiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainTextApiKey)
+            $encryptedBytes = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+            $encryptedBase64 = [System.Convert]::ToBase64String($encryptedBytes)
+            Set-Content -Path $Path -Value $encryptedBase64 -Force
+        }
+        finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
         Write-Host "AbuseIPDB API Key file saved to $Path"
         return $true
     } catch {
@@ -239,10 +249,10 @@ if ($AbuseIPDBReport) {
 
     # Load API key
     try {
-        $secureApiKey = Import-Clixml -Path $AbuseIPDBKeyPath
-        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($secureApiKey)
-        $apiKey = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
-        [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        $encryptedBase64 = Get-Content -Path $AbuseIPDBKeyPath
+        $encryptedBytes = [System.Convert]::FromBase64String($encryptedBase64)
+        $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedBytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+        $apiKey = [System.Text.Encoding]::UTF8.GetString($bytes)
     } catch {
         $errorMessage = "Failed to import AbuseIPDB API key from '$AbuseIPDBKeyPath'. Error: $_"
         Write-Error $errorMessage
