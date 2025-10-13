@@ -61,9 +61,23 @@ function _GenerateCredentialFile {
 
     $EmailLogin = Read-Host "Enter SMTP Username"
     $SecurePassword =  Read-Host "Enter SMTP Password" -AsSecureString
-    $credential = New-Object System.Management.Automation.PSCredential ($EmailLogin, $SecurePassword)
     try {
-        $credential | Export-Clixml -Path $Path -Force
+        $bstr = [System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecurePassword)
+        try {
+            $plainTextPassword = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
+            $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainTextPassword)
+            $encryptedBytes = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+            $encryptedBase64Password = [System.Convert]::ToBase64String($encryptedBytes)
+        }
+        finally {
+            [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+        }
+        
+        $credentialObject = [PSCustomObject]@{
+            UserName = $EmailLogin
+            Password = $encryptedBase64Password
+        }
+        $credentialObject | Export-Clixml -Path $Path -Force
         Write-Host "Credential file saved to $Path"
         return $true
     } catch {
@@ -433,7 +447,13 @@ if ($Mail) {
     $errorLogPath = Join-Path $PSScriptRoot "report-error.log"
     [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.SecurityProtocolType]::Tls12
     try {
-        $credential = Import-Clixml -Path $MailCred
+        $savedCred = Import-Clixml -Path $MailCred
+        $encryptedBytes = [System.Convert]::FromBase64String($savedCred.Password)
+        $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedBytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
+        $securePassword = [System.Text.Encoding]::UTF8.GetString($bytes) | ConvertTo-SecureString -AsPlainText -Force
+        $credential = New-Object System.Management.Automation.PSCredential ($savedCred.UserName, $securePassword)
+        # Clear sensitive data from memory
+        [System.Array]::Clear($bytes, 0, $bytes.Length)
     } catch {
         $errorMessage = "Failed to import credential file from '$MailCred'. Error: $_"
         Write-Error $errorMessage
