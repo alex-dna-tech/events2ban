@@ -405,7 +405,15 @@ function _InstallScheduledTask {
     $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $($PSScriptRoot)\events2ban.ps1 -Silent"
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -Hidden
+    $settings = New-ScheduledTaskSettingsSet
+    $settings.Hidden = $true
+    $settings.ExecutionTimeLimit = 'PT0S'
+    $settings.DisallowStartIfOnBatteries = $false
+    $settings.StopIfGoingOnBatteries = $false
+    $settings.IdleSettings.StopOnIdleEnd = $false
+    $settings.AllowHardTerminate = $false
+    $settings.RestartCount = 3
+    $settings.RestartInterval = 'PT1M'
     $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
     # Start the task immediately
