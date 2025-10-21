@@ -109,6 +109,7 @@ New-Variable -Name RegexIP -Force -Value ([regex]'(?<First>2[0-4]\d|25[0-5]|[01]
 
 $BannedIPs = @{}
 $TrackedIPs = @{}
+$BanningInProgress = @{}
 
 # Define whitelist IPs
 $Whitelist = $WhiteList -split '\s+' | Where-Object { $_ -ne "" }
@@ -266,6 +267,11 @@ function _GetBanDuration ($IP) {
 
 # Ban the IP (with checking)
 function _JailLockup ($IP, $ExpireDate = $null, $event = $null) {
+    if ($BanningInProgress.ContainsKey($IP)) {
+        _Debug "IN PROGRESS" $IP "Ban already in progress for this IP, skipping."
+        return
+    }
+
     $result = _Whitelisted($IP)
     if ($result) { _Warning "WHITELISTED" $IP "Attempted to ban whitelisted IP" }
     elseif ($SelfList -contains $IP) { _Warning "WHITELISTED" $IP "Attempted to ban self IP" }
@@ -274,26 +280,33 @@ function _JailLockup ($IP, $ExpireDate = $null, $event = $null) {
             _Warning "ALREADY BANNED" $IP "Attempted to ban already banned IP"
         }
         else {
-            if (!$ExpireDate) {
-                $BanDuration = _GetBanDuration($IP)
-                $ExpireDate = (Get-Date).AddSeconds($BanDuration)
-            }
+            try {
+                $BanningInProgress.Add($IP, $true)
+                if (!$ExpireDate) {
+                    $BanDuration = _GetBanDuration($IP)
+                    $ExpireDate = (Get-Date).AddSeconds($BanDuration)
+                }
 
-            _FirewallAdd $IP $ExpireDate
+                _FirewallAdd $IP $ExpireDate
 
-            $jsonLogData = @{
-                "IP"                 = $IP
-                "BanCount"           = $BannedIPs.Get_Item($IP)
-                "BanDurationSeconds" = $BanDuration
-                "ExpireDate"         = $ExpireDate.ToString("o")
+                $jsonLogData = @{
+                    "IP"                 = $IP
+                    "BanCount"           = $BannedIPs.Get_Item($IP)
+                    "BanDurationSeconds" = $BanDuration
+                    "ExpireDate"         = $ExpireDate.ToString("o")
+                }
+                if ($event) {
+                    $jsonLogData['LogName'] = $event.LogName
+                    $jsonLogData['EventID'] = $event.Id
+                }
+                $jsonLog = $jsonLogData | ConvertTo-Json -Compress
+                _LogEventMessage $jsonLog BAN
             }
-            if ($event) {
-                $jsonLogData['LogName'] = $event.LogName
-                $jsonLogData['EventID'] = $event.Id
+            finally {
+                if ($BanningInProgress.ContainsKey($IP)) {
+                    $BanningInProgress.Remove($IP)
+                }
             }
-            $jsonLog = $jsonLogData | ConvertTo-Json -Compress
-            _LogEventMessage $jsonLog BAN
-
         }
     }
 }
