@@ -259,7 +259,7 @@ function _GetBanDuration ($IP) {
     }
     $count += 1
     $BannedIPs.Set_Item($IP, $count)
-    $BanDuration = [math]::min([math]::pow(5, $count) * 60, $MaxBanDuration)
+    $BanDuration = [math]::min([math]::pow(10, $count) * 36000, $MaxBanDuration)
     _Debug "IP $IP has the new count of $count, being $BanDuration seconds"
     _SaveBannedIPsState
     return $BanDuration
@@ -536,4 +536,5 @@ function Main {
 
 
 Main
+
 
