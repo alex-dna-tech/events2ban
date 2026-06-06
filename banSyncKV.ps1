@@ -20,6 +20,7 @@
 param (
     [string]$filename = "bannedIPs.json",
     [switch]$now,
+    [string]$UnbanIP,
     [switch]$install,
     [int]$period = 30,
     [string]$CFCredPath = ".\cf_config.xml"
@@ -107,13 +108,21 @@ function _Sync {
             }
         }
 
-        # 3. Merge: max(local, remote)
+        # 3. Merge: 0 (tombstone) beats any positive; otherwise max(local, remote)
         $merged = $localBans.Clone()
         foreach($ip in $remoteBans.Keys) {
             if ($merged.ContainsKey($ip)) {
-                $merged[$ip] = [math]::Max($merged[$ip], $remoteBans[$ip])
+                if ($merged[$ip] -eq 0 -or $remoteBans[$ip] -eq 0) {
+                    $merged[$ip] = 0
+                } else {
+                    $merged[$ip] = [math]::Max($merged[$ip], $remoteBans[$ip])
+                }
             } else {
-                $merged[$ip] = $remoteBans[$ip]
+                if ($remoteBans[$ip] -eq 0) {
+                    $merged[$ip] = 0
+                } else {
+                    $merged[$ip] = $remoteBans[$ip]
+                }
             }
         }
 
@@ -131,6 +140,44 @@ function _Sync {
     catch {
         Write-Error "Sync failed: $($_.Exception.Message)"
     }
+}
+
+function _UnbanIP {
+    param(
+        [string]$IP,
+        [string]$File
+    )
+
+    $ruleName = "events2ban block: $IP"
+    try {
+        Remove-NetFirewallRule -DisplayName $ruleName -ErrorAction Stop | Out-Null
+        Write-Host "Removed firewall rule for $IP"
+    } catch {
+        if ($_.Exception.Message -match "No MSFT_NetFirewallRule|does not exist") {
+            Write-Host "No firewall rule found for $IP"
+        } else {
+            Write-Warning "Failed to remove firewall rule for $IP: $($_.Exception.Message)"
+        }
+    }
+
+    $localBans = @{}
+    if (Test-Path $File) {
+        $content = Get-Content $File -Raw -ErrorAction SilentlyContinue
+        if (-not [string]::IsNullOrWhiteSpace($content)) {
+            try {
+                $parsed = $content | ConvertFrom-Json
+                foreach($prop in $parsed.psobject.Properties) {
+                    $localBans[$prop.Name] = [int]$prop.Value
+                }
+            } catch {
+                Write-Warning "Invalid JSON in $File, starting fresh."
+            }
+        }
+    }
+
+    $localBans[$IP] = 0
+    $localBans | ConvertTo-Json -Depth 5 | Out-File $File -Encoding utf8 -Force
+    Write-Host "Unbanned $IP. Tombstone (0) set locally. Next sync will propagate to Cloudflare KV."
 }
 
 function _GenerateCFCredFile {
@@ -211,6 +258,14 @@ function _InstallTask {
     $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null
     Write-Host "Scheduled task '$taskName' installed. Period: $Interval min."
+}
+
+if ($UnbanIP) {
+    if (-not ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
+        Write-Error "Unbanning requires administrative privileges."
+        exit 1
+    }
+    _UnbanIP -IP $UnbanIP -File $filename
 }
 
 if ($install) {

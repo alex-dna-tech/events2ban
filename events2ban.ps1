@@ -500,7 +500,14 @@ function Main {
     _Debug "CONFIG" "events2ban" "The Whitelist: $Whitelist"
     _Debug "CONFIG" "events2ban" "The Self-list: $Selflist"
 
+    $reloadCounter = 0
     while ($true) {
+        $reloadCounter++
+        if ($reloadCounter -ge 6) {
+            _LoadBannedIPsState
+            $reloadCounter = 0
+        }
+
         $now = Get-Date
 
         $StartTime = $now.AddSeconds(-$LoopDuration)
