@@ -1,7 +1,8 @@
 .env
-bannedIPs.json
-email.xml
 abuseipdb.xml
+bannedIPs.json
+cf_config.xml
+email.xml
 report.html
 
 # Editor directories and files

@@ -63,7 +63,8 @@ function _Sync {
     $namespaceId = $cred.NamespaceId
 
     $key = "global_banned_ips"
-    $url = "https://api.cloudflare.com/client/v4/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/$key"
+    $encodedKey = [System.Net.WebUtility]::UrlEncode($key)
+    $url = "https://api.cloudflare.com/client/v4/accounts/$accountId/storage/kv/namespaces/$namespaceId/values/$encodedKey"
     $headers = @{ "Authorization" = "Bearer $apiToken" }
 
     try {
@@ -72,19 +73,36 @@ function _Sync {
         if (Test-Path $File) {
             $content = Get-Content $File -Raw
             if (-not [string]::IsNullOrWhiteSpace($content)) {
-                $parsedLocal = $content | ConvertFrom-Json
-                foreach($prop in $parsedLocal.psobject.Properties) {
-                    $localBans[$prop.Name] = [int]$prop.Value
+                try {
+                    $parsedLocal = $content | ConvertFrom-Json
+                    foreach($prop in $parsedLocal.psobject.Properties) {
+                        $localBans[$prop.Name] = [int]$prop.Value
+                    }
+                } catch {
+                    Write-Warning "Local file '$File' has invalid JSON, treating as empty."
                 }
             }
         }
 
-        # 2. Get Remote State
-        $remoteJson = Invoke-RestMethod -Uri $url -Method Get -Headers $headers -ErrorAction SilentlyContinue
+        # 2. Get Remote State (404 = first run, key doesn't exist yet)
         $remoteBans = @{}
-        if ($remoteJson) {
-            $parsedRemote = $remoteJson | ConvertFrom-Json
-            foreach($prop in $parsedRemote.psobject.Properties) {
+        $remoteObj = $null
+        try {
+            $remoteObj = Invoke-RestMethod -Uri $url -Method Get -Headers $headers -ErrorAction Stop
+        } catch {
+            if (-not ($_.Exception.Response -and ($_.Exception.Response.StatusCode -eq 404))) { throw }
+        }
+        if ($remoteObj -is [string]) {
+            try {
+                $parsedRemote = $remoteObj | ConvertFrom-Json
+                foreach($prop in $parsedRemote.psobject.Properties) {
+                    $remoteBans[$prop.Name] = [int]$prop.Value
+                }
+            } catch {
+                Write-Warning "Remote KV contains invalid JSON, treating as empty."
+            }
+        } elseif ($remoteObj -is [PSCustomObject]) {
+            foreach($prop in $remoteObj.psobject.Properties) {
                 $remoteBans[$prop.Name] = [int]$prop.Value
             }
         }
@@ -104,7 +122,9 @@ function _Sync {
 
         # 5. Update Remote KV
         $jsonPut = $merged | ConvertTo-Json -Depth 5
-        Invoke-RestMethod -Uri $url -Method Put -Headers $headers -Body $jsonPut -ErrorAction Stop | Out-Null
+        $putHeaders = $headers.Clone()
+        $putHeaders["Content-Type"] = "application/json"
+        Invoke-RestMethod -Uri $url -Method Put -Headers $putHeaders -Body $jsonPut -ErrorAction Stop | Out-Null
 
         Write-Host "Sync complete. Total IPs: $($merged.Count)"
     }
