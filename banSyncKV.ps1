@@ -156,7 +156,7 @@ function _UnbanIP {
         if ($_.Exception.Message -match "No MSFT_NetFirewallRule|does not exist") {
             Write-Host "No firewall rule found for $IP"
         } else {
-            Write-Warning "Failed to remove firewall rule for $IP: $($_.Exception.Message)"
+            Write-Warning "Failed to remove firewall rule for ${IP}: $($_.Exception.Message)"
         }
     }
 
