@@ -23,9 +23,29 @@ param (
     [string]$UnbanIP,
     [switch]$install,
     [int]$period = 30,
-    [string]$CFCredPath = ".\cf_config.xml"
+    [string]$CFCredPath = ".\cf_config.xml",
+    [string]$LogFile = ""
 )
 Add-Type -AssemblyName System.Security
+
+if ([string]::IsNullOrWhiteSpace($LogFile)) {
+    $LogFile = Join-Path $PSScriptRoot "banSyncKV.log"
+}
+
+function _WriteLog {
+    param([string]$Message, [string]$Level = "INFO")
+    $timestamp = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
+    $line = "[$timestamp] [$Level] $Message"
+    Add-Content -Path $LogFile -Value $line -Encoding utf8
+    switch ($Level) {
+        "ERROR" { Write-Host $line -ForegroundColor Red }
+        "WARN"  { Write-Host $line -ForegroundColor Yellow }
+        default { Write-Host $line }
+    }
+}
+
+_WriteLog "=== Script started ==="
+_WriteLog "Filename=$filename, CFCredPath=$CFCredPath, LogFile=$LogFile"
 
 function _Sync {
     param(
@@ -38,14 +58,14 @@ function _Sync {
     }
 
     if (-not (Test-Path $CFCredPath)) {
-        Write-Error "Cloudflare credential file not found at '$CFCredPath'."
+        _WriteLog -Level ERROR "Cloudflare credential file not found at '$CFCredPath'."
         exit 1
     }
 
     try {
         $cred = Import-Clixml -Path $CFCredPath
     } catch {
-        Write-Error "Failed to load Cloudflare credential file from '$CFCredPath'."
+        _WriteLog -Level ERROR "Failed to load Cloudflare credential file from '$CFCredPath'."
         exit 1
     }
 
@@ -54,7 +74,7 @@ function _Sync {
         $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedBytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
         $apiToken = [System.Text.Encoding]::UTF8.GetString($bytes)
     } catch {
-        Write-Error "Failed to decrypt API token from credential file."
+        _WriteLog -Level ERROR "Failed to decrypt API token from credential file."
         exit 1
     }
 
@@ -80,7 +100,7 @@ function _Sync {
                         $localBans[$prop.Name] = [int]$prop.Value
                     }
                 } catch {
-                    Write-Warning "Local file '$File' has invalid JSON, treating as empty."
+                    _WriteLog -Level WARN "Local file '$File' has invalid JSON, treating as empty."
                 }
             }
         }
@@ -100,7 +120,7 @@ function _Sync {
                     $remoteBans[$prop.Name] = [int]$prop.Value
                 }
             } catch {
-                Write-Warning "Remote KV contains invalid JSON, treating as empty."
+                _WriteLog -Level WARN "Remote KV contains invalid JSON, treating as empty."
             }
         } elseif ($remoteObj -is [PSCustomObject]) {
             foreach($prop in $remoteObj.psobject.Properties) {
@@ -135,10 +155,12 @@ function _Sync {
         $putHeaders["Content-Type"] = "application/json"
         Invoke-RestMethod -Uri $url -Method Put -Headers $putHeaders -Body $jsonPut -ErrorAction Stop | Out-Null
 
-        Write-Host "Sync complete. Total IPs: $($merged.Count)"
+        _WriteLog "Sync complete. Total IPs: $($merged.Count)"
+        exit 0
     }
     catch {
-        Write-Error "Sync failed: $($_.Exception.Message)"
+        _WriteLog -Level ERROR "Sync failed: $($_.Exception.Message)"
+        exit 1
     }
 }
 
@@ -249,11 +271,11 @@ function _InstallTask {
     $taskName = "events2ban-sync"
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
 
-    $arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSScriptRoot\banSyncKV.ps1`" -filename `"$filename`" -CFCredPath `"$CFCredPath`" -now"
+    $arguments = "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$PSScriptRoot\banSyncKV.ps1`" -filename `"$filename`" -CFCredPath `"$CFCredPath`" -LogFile `"$PSScriptRoot\banSyncKV.log`" -now"
     $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument $arguments -WorkingDirectory $PSScriptRoot
     $trigger = New-ScheduledTaskTrigger -Once -At (Get-Date) -RepetitionInterval (New-TimeSpan -Minutes $Interval)
     $principal = New-ScheduledTaskPrincipal -UserID ([Security.Principal.WindowsIdentity]::GetCurrent().Name) -LogonType S4U -RunLevel Highest
-    $settings = New-ScheduledTaskSettingsSet -Hidden
+    $settings = New-ScheduledTaskSettingsSet -Hidden -StartWhenAvailable -RestartInterval (New-TimeSpan -Minutes 1) -RestartCount 3
 
     $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
     Register-ScheduledTask -TaskName $taskName -InputObject $task -Force | Out-Null

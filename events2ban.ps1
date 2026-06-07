@@ -57,7 +57,8 @@ param (
     [int]$LoopDuration = 5,
     [int]$MaxBanDuration = 7776000,
     [string]$EventsToTrack = "Security 4625",
-    [string]$WhiteList = "" 
+    [string]$WhiteList = "",
+    [string]$LogFile = ""
 )
 
 
@@ -92,6 +93,23 @@ if ($policy -eq 'Restricted') {
 
 $DebugPreference = if ($Silent) { "SilentlyContinue" } else { "Continue" }
 
+if ([string]::IsNullOrWhiteSpace($LogFile)) {
+    $LogFile = Join-Path $PSScriptRoot "events2ban.log"
+}
+
+function _WriteLog ($type, $action, $ip, $reason) {
+    $timestamp = (Get-Date -format u).replace("Z", "")
+    $output = "[$timestamp] ${action}: $ip - $reason"
+    $logLine = "[$timestamp] [$type] ${action}: $ip - $reason"
+    Add-Content -Path $LogFile -Value $logLine -Encoding utf8
+    switch ($type) {
+        "D" { Write-Debug $output }
+        "W" { Write-Warning $output }
+        "E" { Write-Error $output }
+    }
+}
+
+_WriteLog "D" "events2ban" "=== Script started ==="
 
 ################################################################################
 #  Configurable Variables
@@ -156,16 +174,6 @@ function _Error       ($action, $ip, $reason) { _WriteLog "E" $action $ip $reaso
 function _Warning     ($action, $ip, $reason) { _WriteLog "W" $action $ip $reason }
 function _Debug       ($action, $ip, $reason) { _WriteLog "D" $action $ip $reason }
 
-# Log things to the console
-function _WriteLog ($type, $action, $ip, $reason) {
-    $timestamp = (Get-Date -format u).replace("Z", "")
-    $output = "[$timestamp] ${action}: $ip - $reason"
-    switch ($type) {
-        "D" { Write-Debug $output }
-        "W" { Write-Warning $output }
-        "E" { Write-Error $output }
-    }
-}
 	 
 # Get the current list of events2ban bans
 function _GetJailList {
@@ -415,7 +423,7 @@ function _InstallScheduledTask {
     $taskName = "events2ban"
     # Unregister existing task if any
     Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
-    $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File $($PSScriptRoot)\events2ban.ps1 -Silent"
+    $action = New-ScheduledTaskAction -Execute (Get-Command 'powershell.exe').Path -Argument "-WindowStyle Hidden -ExecutionPolicy Bypass -File `"$($PSScriptRoot)\events2ban.ps1`" -Silent -LogFile `"$($PSScriptRoot)\events2ban.log`""
     $trigger = New-ScheduledTaskTrigger -AtStartup
     $principal = New-ScheduledTaskPrincipal -UserID "NT AUTHORITY\SYSTEM" -LogonType ServiceAccount -RunLevel Highest
     $settings = New-ScheduledTaskSettingsSet
@@ -425,6 +433,7 @@ function _InstallScheduledTask {
     $settings.StopIfGoingOnBatteries = $false
     $settings.IdleSettings.StopOnIdleEnd = $false
     $settings.AllowHardTerminate = $false
+    $settings.StartWhenAvailable = $true
     $settings.RestartCount = 3
     $settings.RestartInterval = 'PT1M'
     $task = New-ScheduledTask -Action $action -Trigger $trigger -Principal $principal -Settings $settings
