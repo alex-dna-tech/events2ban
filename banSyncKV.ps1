@@ -71,7 +71,7 @@ function _Sync {
 
     try {
         $encryptedBytes = [System.Convert]::FromBase64String($cred.ApiToken)
-        $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedBytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+        $bytes = [System.Security.Cryptography.ProtectedData]::Unprotect($encryptedBytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
         $apiToken = [System.Text.Encoding]::UTF8.GetString($bytes)
     } catch {
         _WriteLog -Level ERROR "Failed to decrypt API token from credential file."
@@ -219,7 +219,7 @@ function _GenerateCFCredFile {
         try {
             $plainToken = [System.Runtime.InteropServices.Marshal]::PtrToStringAuto($bstr)
             $bytes = [System.Text.Encoding]::UTF8.GetBytes($plainToken)
-            $encryptedBytes = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::CurrentUser)
+            $encryptedBytes = [System.Security.Cryptography.ProtectedData]::Protect($bytes, $null, [System.Security.Cryptography.DataProtectionScope]::LocalMachine)
             $encryptedToken = [System.Convert]::ToBase64String($encryptedBytes)
         } finally {
             [System.Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
