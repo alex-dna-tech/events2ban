@@ -147,10 +147,11 @@ function _Sync {
         }
 
         # 4. Update Local File
-        $merged | ConvertTo-Json -Depth 5 | Out-File $File -Encoding utf8 -Force
+        $merged | ConvertTo-Json -Depth 5 | ForEach-Object { $_ -replace '":\s{2,}', '": ' } | Out-File $File -Encoding utf8 -Force
 
         # 5. Update Remote KV
         $jsonPut = $merged | ConvertTo-Json -Depth 5
+        $jsonPut = $jsonPut -replace '":\s{2,}', '": '
         $putHeaders = $headers.Clone()
         $putHeaders["Content-Type"] = "application/json"
         Invoke-RestMethod -Uri $url -Method Put -Headers $putHeaders -Body $jsonPut -ErrorAction Stop | Out-Null
